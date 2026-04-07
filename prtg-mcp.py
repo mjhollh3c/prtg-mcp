@@ -635,5 +635,228 @@ async def get_historic_data(
     return await _prtg_v1("historicdata.json", params=params)
 
 
+# =============================================================================
+# V1 WRITE TOOLS — Operational Controls
+# =============================================================================
+
+
+@mcp.tool()
+async def pause_object(
+    object_id: int,
+    message: Optional[str] = None,
+) -> str:
+    """Pause a PRTG object (sensor, device, group, or probe) indefinitely via the V1 API.
+
+    Pausing stops all monitoring checks on the object and any sensors beneath it
+    in the hierarchy. The object remains paused until it is explicitly resumed.
+    Pausing is useful for planned maintenance windows or when you want to suppress
+    alerts without deleting the monitoring configuration.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to pause.
+        message: Optional human-readable reason for the pause, displayed in the
+            PRTG UI and logs.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "action": 0}
+    if message is not None:
+        params["pausemsg"] = message
+    return await _prtg_v1("pause.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def pause_object_for(
+    object_id: int,
+    duration: int,
+    message: Optional[str] = None,
+) -> str:
+    """Pause a PRTG object for a fixed duration, then automatically resume it.
+
+    Unlike pause_object, this variant schedules an automatic resume after the
+    specified number of minutes. This is ideal for short maintenance windows
+    where you want monitoring to resume without manual intervention.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to pause.
+        duration: Number of minutes to keep the object paused before auto-resume.
+        message: Optional human-readable reason for the pause.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "duration": duration}
+    if message is not None:
+        params["pausemsg"] = message
+    return await _prtg_v1("pauseobjectfor.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def resume_object(object_id: int) -> str:
+    """Resume a previously paused PRTG object via the V1 API.
+
+    Resumes monitoring on a paused sensor, device, group, or probe. PRTG will
+    immediately begin executing checks again and reporting results. Use this
+    after a maintenance window or when an issue has been resolved.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the paused PRTG object to resume.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "action": 1}
+    return await _prtg_v1("pause.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def acknowledge_alarm(
+    object_id: int,
+    message: Optional[str] = None,
+) -> str:
+    """Acknowledge a PRTG alarm on a Down or DownAcknowledged sensor via the V1 API.
+
+    Acknowledging an alarm signals that a human is aware of the problem and
+    suppresses repeat notifications. The sensor continues to be monitored but
+    its status changes to DownAcknowledged. The acknowledgement message is
+    displayed in the PRTG UI and alarm history.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG sensor with an active alarm.
+        message: Optional acknowledgement message explaining the situation or
+            the action being taken.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id}
+    if message is not None:
+        params["ackmsg"] = message
+    return await _prtg_v1("acknowledgealarm.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def scan_now(object_id: int) -> str:
+    """Force an immediate on-demand scan of a PRTG sensor or device via the V1 API.
+
+    Triggers a single out-of-schedule check cycle on the specified object
+    without waiting for the next regular scan interval. Useful for verifying
+    that a resolved issue is actually fixed, or for getting an immediate reading
+    after a configuration change.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG sensor or device to scan.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id}
+    return await _prtg_v1("scannow.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def simulate_error(object_id: int) -> str:
+    """Simulate a sensor error on a PRTG sensor via the V1 API.
+
+    Forces the specified sensor into a Down state, which is useful for testing
+    alert and notification pipelines without waiting for a real failure. The
+    simulated error will be cleared on the next regular scan cycle.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG sensor to put into a simulated
+            error state.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "action": 1}
+    return await _prtg_v1("simulate.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def auto_discovery(
+    object_id: int,
+    template: Optional[str] = None,
+) -> str:
+    """Trigger an auto-discovery scan on a PRTG group or device via the V1 API.
+
+    Auto-discovery scans the network segment associated with the target object
+    and automatically adds newly found devices and sensors based on the specified
+    device template. Useful for keeping your monitoring tree up to date as
+    infrastructure changes.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG group or device to run discovery on.
+        template: Optional name of a device template to apply to discovered
+            devices. If omitted, PRTG uses its default auto-discovery templates.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id}
+    if template is not None:
+        params["template"] = template
+    return await _prtg_v1("discovernow.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def test_notification(notification_id: int) -> str:
+    """Send a test notification via a PRTG notification contact via the V1 API.
+
+    Triggers a test delivery through the specified notification contact (email,
+    SMS, webhook, etc.) so you can verify that the delivery channel is correctly
+    configured without waiting for a real alert.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        notification_id: The numeric ID of the PRTG notification contact to test.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": notification_id}
+    return await _prtg_v1("notificationtest.htm", params=params, expect_json=False)
+
+
 if __name__ == "__main__":
     mcp.run()
