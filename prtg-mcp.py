@@ -858,5 +858,213 @@ async def test_notification(notification_id: int) -> str:
     return await _prtg_v1("notificationtest.htm", params=params, expect_json=False)
 
 
+# =============================================================================
+# V1 WRITE TOOLS — Object Management
+# =============================================================================
+
+
+@mcp.tool()
+async def rename_object(object_id: int, new_name: str) -> str:
+    """Rename a PRTG object (sensor, device, group, or probe) via the V1 API.
+
+    Changes the display name of the specified object in the PRTG UI. The rename
+    is immediate and does not affect monitoring behaviour or collected data.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to rename.
+        new_name: The new display name to assign to the object.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "value": new_name}
+    return await _prtg_v1("rename.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def set_object_property(
+    object_id: int,
+    name: str,
+    value: str,
+) -> str:
+    """Set an arbitrary property on a PRTG object via the V1 API.
+
+    Writes a single named property value to any PRTG object. This is the
+    general-purpose setter used to change settings such as scanning intervals,
+    credentials, thresholds, and other sensor-specific or device-specific
+    parameters. Consult the PRTG documentation for valid property names for each
+    object type.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to modify.
+        name: The internal property name to set (e.g. "interval", "host",
+            "tags", "priority").
+        value: The new value for the property as a string.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "name": name, "value": value}
+    return await _prtg_v1("setobjectproperty.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def set_priority(object_id: int, priority: int) -> str:
+    """Set the priority star-rating of a PRTG object via the V1 API.
+
+    PRTG allows each object to be assigned a priority from 1 (lowest) to 5
+    (highest). Priority affects the display order in certain views and can be
+    used to focus attention on the most critical sensors or devices.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object whose priority to change.
+        priority: Priority level, an integer from 1 (lowest) to 5 (highest).
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "prio": priority}
+    return await _prtg_v1("setpriority.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def clone_object(
+    object_id: int,
+    name: str,
+    target_id: Optional[int] = None,
+    host: Optional[str] = None,
+) -> str:
+    """Clone (duplicate) a PRTG object into the same or a different parent via the V1 API.
+
+    Creates a copy of the specified sensor, device, or group with all its
+    settings and child objects. The cloned object is placed under target_id if
+    provided, or under the same parent as the original if not.
+
+    IMPORTANT: Cloned objects always start in a PAUSED state. You must
+    explicitly resume them (via resume_object) after cloning and making any
+    desired configuration adjustments.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to clone.
+        name: Display name for the newly cloned object.
+        target_id: Optional numeric ID of the parent object under which to
+            place the clone. If omitted, PRTG places it under the original's
+            parent.
+        host: Optional hostname or IP address for the cloned device. Only
+            applicable when cloning a device object.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "name": name}
+    if target_id is not None:
+        params["targetid"] = target_id
+    if host is not None:
+        params["host"] = host
+    return await _prtg_v1("duplicateobject.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def set_position(object_id: int, position: str) -> str:
+    """Change the display position of a PRTG object within its parent container.
+
+    Adjusts where the object appears in the PRTG UI relative to its siblings.
+    Useful for keeping frequently monitored or critical objects at the top of
+    lists for quicker access.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to reposition.
+        position: Direction or absolute position. Must be one of:
+            "up"     — move one position up in the list
+            "down"   — move one position down in the list
+            "top"    — move to the very top of the list
+            "bottom" — move to the very bottom of the list
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "newpos": position}
+    return await _prtg_v1("setposition.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def set_geo_location(
+    object_id: int,
+    location: str,
+    lonlat: str,
+) -> str:
+    """Set the geographic location of a PRTG object via the V1 API.
+
+    Associates a human-readable location label and GPS coordinates with a
+    PRTG device or group. These values are displayed on PRTG map widgets and
+    geographic dashboards.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: The numeric ID of the PRTG object to geolocate.
+        location: Human-readable location description, e.g. "New York, NY, USA".
+        lonlat: GPS coordinates as a "longitude,latitude" string,
+            e.g. "-74.006,40.7128".
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": object_id, "location": location, "lonlat": lonlat}
+    return await _prtg_v1("setlonlat.htm", params=params, expect_json=False)
+
+
+@mcp.tool()
+async def add_to_report(report_id: int, object_id: int) -> str:
+    """Add a sensor to a PRTG report via the V1 API.
+
+    Associates a sensor with an existing scheduled or on-demand report so that
+    the sensor's data is included the next time the report is generated. Reports
+    can aggregate data from many sensors into a single PDF or HTML document.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        report_id: The numeric ID of the PRTG report to add the sensor to.
+        object_id: The numeric ID of the PRTG sensor to include in the report.
+
+    Returns:
+        Success message with HTTP status code, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    params: dict = {"id": report_id, "addid": object_id}
+    return await _prtg_v1("reportaddsensor.htm", params=params, expect_json=False)
+
+
 if __name__ == "__main__":
     mcp.run()
