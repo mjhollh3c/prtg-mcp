@@ -1290,6 +1290,57 @@ async def trigger_metascan(device_id: int) -> str:
     return json.dumps(result, indent=2)
 
 
+# =============================================================================
+# CONVENIENCE TOOLS — Composite Read-Only
+# =============================================================================
+
+
+@mcp.tool()
+async def get_problem_sensors(limit: Optional[int] = None) -> str:
+    """Return all sensors that are not in the 'Up' state via the V2 API.
+
+    A pre-built "what's broken?" query that filters the sensor list to only
+    those with a status other than Up. This includes sensors that are Down,
+    Warning, Unusual, Paused, or in any other non-healthy state. Use this as
+    a quick health check across the entire monitoring environment.
+
+    Args:
+        limit: Maximum number of problem sensors to return. Defaults to 500
+            when not specified.
+
+    Returns:
+        JSON string containing the list of non-Up sensors and pagination
+        metadata.
+    """
+    params = _build_v2_list_params(filter="status ne Up", limit=limit)
+    result = await _prtg_v2("GET", "/experimental/sensors", params=params)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def get_device_health(device_id: int) -> str:
+    """Return a sensor status summary for a single device via the V1 API.
+
+    Retrieves a compact overview of how many sensors on the specified device
+    are Up, Down, Down (acknowledged), Partially Down, Warning, Paused,
+    Unusual, or Undefined. Use this to quickly assess the overall health of a
+    device without listing every individual sensor.
+
+    Args:
+        device_id: Numeric ID of the PRTG device to summarise.
+
+    Returns:
+        JSON string containing the device row with all sensor-count columns.
+    """
+    params = {
+        "content": "devices",
+        "columns": "objid,name,host,upsens,downsens,downacksens,partialdownsens,warnsens,pausedsens,unusualsens,undefinedsens,totalsens",
+        "id": device_id,
+        "count": 1,
+        "output": "json",
+    }
+    return await _prtg_v1("table.json", params=params)
+
 
 if __name__ == "__main__":
     mcp.run()
