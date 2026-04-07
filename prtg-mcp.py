@@ -408,8 +408,11 @@ async def get_child_object_types(parent_id: int) -> str:
         JSON string listing the child object types available under the specified
         parent.
     """
-    result = await _prtg_v2("GET", f"/experimental/objects/{parent_id}/types")
-    return json.dumps(result, indent=2)
+    try:
+        result = await _prtg_v2("GET", f"/experimental/objects/{parent_id}/types")
+        return json.dumps(result, indent=2)
+    except Exception:
+        return json.dumps({"error": "This endpoint is not available on your PRTG version. Use get_device_templates instead for sensor type discovery."}, indent=2)
 
 
 # =============================================================================
@@ -1360,7 +1363,10 @@ async def get_problem_sensors(limit: Optional[int] = None) -> str:
         JSON string containing the list of non-Up sensors and pagination
         metadata.
     """
-    params = _build_v2_list_params(filter="status ne Up", limit=limit)
+    params = _build_v2_list_params(
+        filter="status in [DOWN,WARNING,UNKNOWN,UNUSUAL,COLLECTING,NONE]",
+        limit=limit,
+    )
     result = await _prtg_v2("GET", "/experimental/sensors", params=params)
     return json.dumps(result, indent=2)
 
