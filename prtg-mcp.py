@@ -1066,5 +1066,230 @@ async def add_to_report(report_id: int, object_id: int) -> str:
     return await _prtg_v1("reportaddsensor.htm", params=params, expect_json=False)
 
 
+# =============================================================================
+# V2 WRITE TOOLS — Create, Update, Move, Delete
+# =============================================================================
+
+
+@mcp.tool()
+async def create_group(parent_id: int, parent_type: str, name: str) -> str:
+    """Create a new group under a probe or group via the V2 API.
+
+    Groups are the organisational containers used to arrange devices inside a
+    probe or inside another group. Use this tool to build out the hierarchy of
+    your PRTG monitoring tree.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        parent_id: Numeric ID of the parent probe or group that will contain
+            the new group.
+        parent_type: The type of the parent object. Must be either "probes"
+            or "groups".
+        name: Display name for the new group.
+
+    Returns:
+        JSON string with the created group object, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "POST",
+        f"/experimental/{parent_type}/{parent_id}/group",
+        json_body={"name": name},
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def create_device(
+    parent_id: int, parent_type: str, name: str, host: str
+) -> str:
+    """Create a new device under a group or probe via the V2 API.
+
+    Devices represent the physical or virtual hosts that PRTG monitors. A device
+    must belong to either a group or a probe and must have a resolvable hostname
+    or IP address so that sensors can reach it.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        parent_id: Numeric ID of the parent group or probe.
+        parent_type: Type of the parent object. Typically "groups" or "probes".
+        name: Display name for the new device.
+        host: Hostname or IP address that PRTG will use to contact the device.
+
+    Returns:
+        JSON string with the created device object, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "POST",
+        f"/experimental/{parent_type}/{parent_id}/devices",
+        json_body={"name": name, "host": host},
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def create_sensor(
+    device_id: int,
+    sensor_type: str,
+    name: str,
+    properties: Optional[str] = None,
+) -> str:
+    """Create a new sensor on a device via the V2 API.
+
+    Sensors perform the actual monitoring checks (ping, SNMP, HTTP, etc.). Each
+    sensor belongs to exactly one device and executes according to its own
+    scanning interval and inherited channel settings.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        device_id: Numeric ID of the device that will host the new sensor.
+        sensor_type: Sensor type identifier string as recognised by PRTG,
+            e.g. "ping", "snmpcustom", "http".
+        name: Display name for the new sensor.
+        properties: Optional JSON string of additional sensor properties to
+            merge into the creation payload, e.g. '{"interval": 60}'.
+
+    Returns:
+        JSON string with the created sensor object, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    body: dict = {"name": name, "type": sensor_type}
+    if properties:
+        body.update(json.loads(properties))
+    result = await _prtg_v2(
+        "POST",
+        f"/experimental/devices/{device_id}/sensor",
+        json_body=body,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def update_sensor(sensor_id: int, properties: str) -> str:
+    """Update properties of an existing sensor via the V2 API.
+
+    Patches one or more sensor attributes without replacing the whole object.
+    Only the keys present in the properties JSON are modified; all other
+    sensor settings remain unchanged.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        sensor_id: Numeric ID of the sensor to update.
+        properties: JSON string of the properties to change, e.g.
+            '{"name": "New Name", "interval": 300}'.
+
+    Returns:
+        JSON string with the updated sensor object, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "PATCH",
+        f"/experimental/sensor/{sensor_id}",
+        json_body=json.loads(properties),
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def move_object(
+    object_id: int, object_type: str, target_id: int
+) -> str:
+    """Move a PRTG object to a different parent container via the V2 API.
+
+    Relocates a probe, group, device, or sensor to a new parent without
+    disrupting its configuration or historical data. Useful for reorganising
+    the monitoring hierarchy after infrastructure changes.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: Numeric ID of the object to move.
+        object_type: Type of the object to move. One of "probes", "groups",
+            "devices", or "sensors".
+        target_id: Numeric ID of the destination parent object.
+
+    Returns:
+        JSON string with the result of the move operation, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "POST",
+        f"/experimental/{object_type}/{object_id}/move",
+        json_body={"targetId": target_id},
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def delete_object(object_id: int, object_type: str) -> str:
+    """Delete a PRTG object permanently via the V2 API.
+
+    WARNING: This is a cascading delete and cannot be undone. Deleting a group
+    will also delete all devices and sensors within it. Deleting a device will
+    delete all its sensors. All associated historical data will be lost.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        object_id: Numeric ID of the object to delete.
+        object_type: Type of the object to delete. One of "probes", "groups",
+            "devices", or "sensors".
+
+    Returns:
+        JSON string with the result of the delete operation, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "DELETE",
+        f"/experimental/{object_type}/{object_id}",
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def trigger_metascan(device_id: int) -> str:
+    """Trigger an auto-discovery metascan on a device via the V2 API.
+
+    A metascan instructs PRTG to probe the target device and automatically
+    suggest or create sensors based on the services and protocols it discovers.
+    This is equivalent to running "Add Sensor (Auto-Discovery)" in the PRTG web
+    interface.
+
+    Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
+
+    Args:
+        device_id: Numeric ID of the device to scan.
+
+    Returns:
+        JSON string with the metascan result, or an error string.
+    """
+    err = _check_write_allowed()
+    if err:
+        return err
+    result = await _prtg_v2(
+        "POST",
+        f"/experimental/devices/{device_id}/metascan",
+    )
+    return json.dumps(result, indent=2)
+
+
+
 if __name__ == "__main__":
     mcp.run()
