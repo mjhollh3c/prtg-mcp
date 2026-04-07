@@ -3,6 +3,7 @@ import requests
 import urllib3
 import json
 import os
+import asyncio
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -16,12 +17,43 @@ else:
 
 # Configuration
 PRTG_HOST = os.getenv("PRTG_HOST", "").rstrip("/")
+PRTG_V2_HOST = os.getenv("PRTG_V2_HOST", "").rstrip("/") or PRTG_HOST
 PRTG_API_KEY = os.getenv("PRTG_API_KEY", "")
+PRTG_USERNAME = os.getenv("PRTG_USERNAME", "")
+PRTG_PASSWORD = os.getenv("PRTG_PASSWORD", "")
 PRTG_VERIFY_SSL = os.getenv("PRTG_VERIFY_SSL", "false").lower() == "true"
 PRTG_READ_ONLY = os.getenv("PRTG_READ_ONLY", "true").lower() == "true"
 
 if not PRTG_VERIFY_SSL:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# V2 session token management
+_v2_token = None
+_v2_token_lock = asyncio.Lock()
+
+
+async def _get_v2_token() -> str:
+    """Gets a V2 bearer token, obtaining one via session auth if needed."""
+    global _v2_token
+    async with _v2_token_lock:
+        if _v2_token is not None:
+            return _v2_token
+        if PRTG_USERNAME and PRTG_PASSWORD:
+            response = requests.post(
+                f"{PRTG_V2_HOST}/api/v2/session",
+                json={"username": PRTG_USERNAME, "password": PRTG_PASSWORD},
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                verify=PRTG_VERIFY_SSL,
+            )
+            if response.status_code == 200 and "application/json" in response.headers.get("Content-Type", ""):
+                token = response.json().get("token")
+                if token:
+                    _v2_token = token
+                    return _v2_token
+        if PRTG_API_KEY:
+            _v2_token = PRTG_API_KEY
+            return _v2_token
+        raise Exception("No V2 auth available. Set PRTG_USERNAME/PRTG_PASSWORD or PRTG_API_KEY.")
 
 # Create MCP server
 mcp: FastMCP = FastMCP("PRTG Network Monitor MCP")
@@ -65,9 +97,11 @@ async def _prtg_v2(
     json_body: Optional[dict] = None,
 ) -> dict:
     """Makes a request to PRTG API v2. Returns parsed JSON response."""
-    url = f"{PRTG_HOST}/api/v2{path}"
+    global _v2_token
+    token = await _get_v2_token()
+    url = f"{PRTG_V2_HOST}/api/v2{path}"
     headers = {
-        "Authorization": f"Bearer {PRTG_API_KEY}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
@@ -79,6 +113,20 @@ async def _prtg_v2(
         json=json_body,
         verify=PRTG_VERIFY_SSL,
     )
+    if response.status_code == 401:
+        # Token expired — invalidate and retry once
+        async with _v2_token_lock:
+            _v2_token = None
+        token = await _get_v2_token()
+        headers["Authorization"] = f"Bearer {token}"
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            params=params,
+            json=json_body,
+            verify=PRTG_VERIFY_SSL,
+        )
     if response.status_code >= 400:
         raise Exception(
             f"PRTG API v2 error: {response.status_code} {response.reason} - {response.text}"
