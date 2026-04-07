@@ -1,6 +1,6 @@
 # PRTG Network Monitor MCP Server
 
-A Model Context Protocol (MCP) server that exposes 40 tools for interacting with a PRTG Network Monitor installation. The server wraps both the modern PRTG REST API v2 and the classic v1 query-string API, giving AI assistants full read and (optionally) write access to your monitoring environment.
+An MCP server exposing 40 tools for PRTG Network Monitor, wrapping both the REST API v2 (experimental endpoints) and the classic v1 API. Provides full read and (optionally) write access to your monitoring environment through Claude Code.
 
 ---
 
@@ -9,57 +9,40 @@ A Model Context Protocol (MCP) server that exposes 40 tools for interacting with
 ### 1. Install dependencies
 
 ```bash
-pip install fastmcp requests python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 2. Configure environment
 
-Copy or create a `.env` file in the same directory as `prtg-mcp.py`:
+Copy `.env.example` to `.env` and fill in your values:
 
-```env
-PRTG_HOST=https://your-prtg-server.example.com
-PRTG_API_KEY=your-api-token-here
-PRTG_VERIFY_SSL=false
-PRTG_READ_ONLY=true
+```bash
+cp .env.example .env
 ```
 
-### 3. Run locally
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PRTG_HOST` | Yes | — | PRTG server URL (e.g., `https://prtg.example.com`) |
+| `PRTG_API_KEY` | Yes | — | API key (create in PRTG: Setup > Account Settings > API Keys) |
+| `PRTG_VERIFY_SSL` | No | `false` | Set `true` for CA-signed certs |
+| `PRTG_READ_ONLY` | No | `true` | Set `false` to enable write operations |
 
+### 3. Run
+
+**Local:**
 ```bash
 fastmcp run prtg-mcp.py
 ```
 
-### 4. Run with Docker
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY prtg-mcp.py .env ./
-RUN pip install fastmcp requests python-dotenv
-CMD ["fastmcp", "run", "prtg-mcp.py"]
-```
-
+**Docker:**
 ```bash
 docker build -t prtg-mcp .
-docker run --rm prtg-mcp
+docker run --env-file .env -p 8000:8000 prtg-mcp
 ```
 
----
+### 4. Claude Code Integration
 
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PRTG_HOST` | Yes | _(empty)_ | Base URL of your PRTG server, e.g. `https://prtg.example.com`. No trailing slash. |
-| `PRTG_API_KEY` | Yes | _(empty)_ | PRTG API token (found in PRTG under Setup → My Account → API Token). |
-| `PRTG_VERIFY_SSL` | No | `false` | Set to `true` to verify the PRTG server's TLS certificate. Set to `false` for self-signed certs. |
-| `PRTG_READ_ONLY` | No | `true` | When `true`, all write operations are blocked and return an error. Set to `false` to enable create, update, move, delete, and other mutating tools. |
-
----
-
-## Claude Code MCP Configuration
-
-Add the following to your Claude Code MCP configuration (typically `~/.claude/claude_desktop_config.json` or the workspace `.mcp.json`):
+Add to your Claude Code MCP settings:
 
 ```json
 {
@@ -72,108 +55,93 @@ Add the following to your Claude Code MCP configuration (typically `~/.claude/cl
 }
 ```
 
-Replace `/path/to/prtg-mcp.py` with the absolute path to the script on your system.
-
 ---
 
 ## Tool Reference
 
-### V2 Read Tools (14 tools)
+### V2 Read Tools (14)
 
-These tools use the PRTG REST API v2 with Bearer token authentication. They are always available regardless of `PRTG_READ_ONLY`.
-
-| Tool | Description |
-|---|---|
-| `list_probes` | List all PRTG probes with optional filtering, sorting, and pagination. |
-| `get_probe` | Get full details for a single probe by ID. |
-| `list_groups` | List all device groups with optional filtering, sorting, and pagination. |
-| `get_group` | Get full details for a single group by ID. |
-| `list_devices` | List all devices with optional filtering, sorting, and pagination. |
-| `get_device` | Get full details for a single device by ID. |
-| `list_sensors` | List all sensors with optional filtering, sorting, and pagination. |
-| `get_sensor` | Get full details for a single sensor by ID. |
-| `list_channels` | List all channels for a given sensor. |
-| `get_channel` | Get full details for a single channel by sensor ID and channel ID. |
-| `list_objects` | List PRTG objects of any type using the generic objects endpoint. |
-| `list_timeseries` | Query timeseries data for a sensor channel over a time range. |
-| `list_users` | List all PRTG user accounts. |
-| `get_license` | Retrieve current PRTG license information. |
-
-### V1 Read Tools (2 tools)
-
-These tools use the classic PRTG v1 API with API token authentication.
+Always available regardless of `PRTG_READ_ONLY`.
 
 | Tool | Description |
-|---|---|
-| `query_table` | Query any PRTG table (sensors, devices, groups, etc.) with custom column selection and filtering. |
-| `get_historic_data` | Retrieve historic sensor channel data for a specified time range. |
+|------|-------------|
+| `list_probes` | List probes with filtering/pagination/sorting |
+| `list_groups` | List groups |
+| `list_devices` | List devices |
+| `get_device_templates` | Available device templates for auto-discovery |
+| `list_sensors` | List sensors (most commonly used) |
+| `list_channels` | List channels |
+| `list_objects` | List objects across all types |
+| `get_child_object_types` | Discover what can be created under an object |
+| `get_timeseries` | Live or historic timeseries metric data |
+| `list_users` | List users |
+| `get_user` | Get user details |
+| `list_user_groups` | List user groups |
+| `get_user_group` | Get user group details |
+| `get_license_info` | License information |
 
-### V1 Operational Tools (8 tools)
-
-Write-gated. These tools perform operational actions on PRTG objects.
-
-| Tool | Description |
-|---|---|
-| `pause_object` | Pause monitoring for a PRTG object with an optional message and duration. |
-| `resume_object` | Resume monitoring for a paused PRTG object. |
-| `acknowledge_alarm` | Acknowledge a down sensor alarm with a message and optional duration. |
-| `scan_now` | Trigger an immediate scan on a sensor or device. |
-| `simulate_alarm` | Simulate an alarm state on a sensor (for testing). |
-| `start_autodiscovery` | Start auto-discovery on a group or device to find new sensors. |
-| `test_notification` | Send a test notification via a PRTG notification contact. |
-| `mark_ticket_completed` | Mark a PRTG status ticket as completed. |
-
-### V1 Management Tools (7 tools)
-
-Write-gated. These tools modify PRTG object properties and configuration.
+### V1 Read Tools (2)
 
 | Tool | Description |
-|---|---|
-| `rename_object` | Rename any PRTG object. |
-| `set_object_property` | Set a single named property on any PRTG object. |
-| `set_priority` | Set the priority (star rating 1–5) of a PRTG object. |
-| `clone_object` | Clone an existing PRTG object to a new parent. |
-| `set_position` | Set the display position of an object within its parent container. |
-| `set_geo_location` | Set the geographic location and GPS coordinates of an object. |
-| `add_to_report` | Add a sensor to an existing PRTG report. |
+|------|-------------|
+| `query_table` | Flexible table query — sensors, devices, messages, channels, tickets, reports, toplists, sysinfo |
+| `get_historic_data` | Historic sensor data with date range and averaging interval |
 
-### V2 Write Tools (7 tools)
-
-Write-gated. These tools use the PRTG REST API v2 to create, modify, move, and delete objects.
+### V1 Operational Tools (8) — requires `PRTG_READ_ONLY=false`
 
 | Tool | Description |
-|---|---|
-| `create_group` | Create a new group under a probe or group. |
-| `create_device` | Create a new device under a group or probe with a hostname or IP. |
-| `create_sensor` | Create a new sensor on a device with optional extra properties. |
-| `update_sensor` | Patch one or more properties of an existing sensor. |
-| `move_object` | Move any object to a different parent container. |
-| `delete_object` | Permanently delete an object and all its children (cascading, irreversible). |
-| `trigger_metascan` | Trigger an auto-discovery metascan on a device. |
+|------|-------------|
+| `pause_object` | Pause monitoring indefinitely with message |
+| `pause_object_for` | Pause monitoring for N minutes |
+| `resume_object` | Resume monitoring |
+| `acknowledge_alarm` | Acknowledge down alert with message |
+| `scan_now` | Force immediate sensor scan |
+| `simulate_error` | Simulate error on sensor |
+| `auto_discovery` | Run auto-discovery on group/device |
+| `test_notification` | Test notification template |
 
-### Convenience Tools (2 tools)
-
-Read-only composite tools for common queries.
+### V1 Management Tools (7) — requires `PRTG_READ_ONLY=false`
 
 | Tool | Description |
-|---|---|
-| `get_problem_sensors` | Return all sensors that are not in the Up state — a quick "what's broken?" view. |
-| `get_device_health` | Return a sensor status summary (up/down/warn counts) for a single device. |
+|------|-------------|
+| `rename_object` | Rename any object |
+| `set_object_property` | Change object properties |
+| `set_priority` | Set priority (1-5) |
+| `clone_object` | Clone group/device/sensor (starts paused) |
+| `set_position` | Reorder in tree (up/down/top/bottom) |
+| `set_geo_location` | Set geographic location |
+| `add_to_report` | Add object to report |
+
+### V2 Write Tools (7) — requires `PRTG_READ_ONLY=false`
+
+| Tool | Description |
+|------|-------------|
+| `create_group` | Create group under probe/group |
+| `create_device` | Create device |
+| `create_sensor` | Create sensor on device |
+| `update_sensor` | Update sensor properties |
+| `move_object` | Move object in tree |
+| `delete_object` | Delete object (cascading, irreversible) |
+| `trigger_metascan` | Re-discover sensor types on device |
+
+### Convenience Tools (2)
+
+| Tool | Description |
+|------|-------------|
+| `get_problem_sensors` | List all non-Up sensors — "what's broken?" |
+| `get_device_health` | Device sensor status summary (up/down/warn counts) |
 
 ---
 
 ## Safety
 
-`PRTG_READ_ONLY` defaults to `true`. In this mode all write-gated tools return an error immediately without contacting the PRTG server:
+`PRTG_READ_ONLY` defaults to `true`. All 22 write tools return an error without contacting PRTG:
 
 ```
 Write operations disabled. Set PRTG_READ_ONLY=false in .env to enable.
 ```
 
-Before enabling write mode, note that:
-
-- **`delete_object`** performs a **cascading, irreversible delete**. Deleting a group removes all devices and sensors inside it, along with all their historical data.
-- **`create_sensor`** and **`trigger_metascan`** can generate significant network traffic if run against many devices simultaneously.
-- All write tools should be used with care in production monitoring environments.
-
-Set `PRTG_READ_ONLY=false` only when you need to make changes, and consider reverting to `true` afterwards.
+**Caution when write mode is enabled:**
+- `delete_object` performs cascading, irreversible deletion — deleting a group removes all devices and sensors inside it
+- `clone_object` creates objects in a paused state — remember to `resume_object` after cloning
+- All write tools should be used carefully in production monitoring environments
