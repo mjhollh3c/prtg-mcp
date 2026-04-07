@@ -526,5 +526,114 @@ async def get_license_info() -> str:
     return json.dumps(result, indent=2)
 
 
+# =============================================================================
+# V1 READ TOOLS — Table Queries & Historic Data
+# =============================================================================
+
+
+@mcp.tool()
+async def query_table(
+    content: str,
+    columns: str,
+    count: Optional[int] = None,
+    start: Optional[int] = None,
+    id: Optional[int] = None,
+    filter_status: Optional[str] = None,
+    filter_tags: Optional[str] = None,
+    sort_by: Optional[str] = None,
+) -> str:
+    """Query any PRTG data table via the V1 API — the power tool for flexible data retrieval.
+
+    The table.json endpoint is the most versatile read endpoint in the PRTG V1
+    API. By choosing the right content type and columns you can retrieve sensors,
+    devices, messages, channel values, tickets, reports, toplists, and system
+    info all from a single call. It supports filtering by status or tag,
+    sorting, and pagination.
+
+    Args:
+        content: The table type to query. One of:
+            "sensors"       — all sensor objects
+            "devices"       — all device objects
+            "messages"      — log / message entries
+            "channels"      — sensor channel data
+            "values"        — raw measurement values
+            "tickets"       — PRTG support tickets / TODOs
+            "ticketdata"    — ticket detail rows
+            "reports"       — scheduled report definitions
+            "storedreports" — previously generated report files
+            "toplists"      — top-N sensor lists
+            "sysinfo"       — system-information tables
+        columns: Comma-separated list of column names to include in the result.
+            Common columns: "objid,device,sensor,status,lastvalue,message"
+        count: Maximum number of rows to return. Defaults to 500, maximum 50000.
+        start: Zero-based row index to start from (for pagination).
+        id: Limit results to the subtree rooted at this PRTG object ID.
+        filter_status: Filter by sensor status numeric code. Values:
+            1=Unknown, 2=Collecting, 3=Up, 4=Warning, 5=Down, 6=NoProbe,
+            7=PausedbyUser, 8=PausedbyDependency, 9=PausedbySchedule,
+            10=Unusual, 11=PausedbyLicense, 12=PausedUntil,
+            13=DownAcknowledged, 14=DownPartial
+        filter_tags: Filter by tag expression, e.g. "@tag(bandwidth)".
+        sort_by: Column to sort by. Prefix with "-" for descending order.
+
+    Returns:
+        JSON string containing the table rows and associated metadata.
+    """
+    params: dict = {
+        "content": content,
+        "columns": columns,
+        "output": "json",
+        "count": count if count is not None else 500,
+    }
+    if start is not None:
+        params["start"] = start
+    if id is not None:
+        params["id"] = id
+    if filter_status is not None:
+        params["filter_status"] = filter_status
+    if filter_tags is not None:
+        params["filter_tags"] = filter_tags
+    if sort_by is not None:
+        params["sortby"] = sort_by
+    return await _prtg_v1("table.json", params=params)
+
+
+@mcp.tool()
+async def get_historic_data(
+    sensor_id: int,
+    start_date: str,
+    end_date: str,
+    avg: Optional[int] = None,
+) -> str:
+    """Retrieve historic measurement data for a PRTG sensor via the V1 API.
+
+    Returns averaged historic channel values for the specified sensor over the
+    requested time window. Data is returned at the averaging interval specified
+    by the avg parameter — shorter intervals produce more data points but cover
+    less history. PRTG stores historic data for as long as the data retention
+    policy allows.
+
+    Args:
+        sensor_id: The numeric ID of the sensor whose historic data to retrieve.
+        start_date: Start of the time window in PRTG date format: YYYY-MM-DD-HH-MM-SS.
+            Example: "2025-01-01-00-00-00"
+        end_date: End of the time window in PRTG date format: YYYY-MM-DD-HH-MM-SS.
+            Example: "2025-01-02-00-00-00"
+        avg: Averaging interval in seconds. Common values: 60, 300, 3600, 86400.
+            Defaults to 300 (5 minutes).
+
+    Returns:
+        JSON string containing the historic data rows, channel names, and units.
+    """
+    params: dict = {
+        "id": sensor_id,
+        "sdate": start_date,
+        "edate": end_date,
+        "usecaption": 1,
+        "avg": avg if avg is not None else 300,
+    }
+    return await _prtg_v1("historicdata.json", params=params)
+
+
 if __name__ == "__main__":
     mcp.run()
