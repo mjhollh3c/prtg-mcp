@@ -1281,7 +1281,7 @@ async def move_object(
     result = await _prtg_v2(
         "POST",
         f"/experimental/{object_type}/{object_id}/move",
-        json_body={"targetId": target_id},
+        json_body={"parent": str(target_id)},
     )
     return json.dumps(result, indent=2)
 
