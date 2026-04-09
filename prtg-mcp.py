@@ -1214,9 +1214,15 @@ async def create_sensor(
     err = _check_write_allowed()
     if err:
         return err
-    body: dict = {"name": name, "type": sensor_type}
+    body: dict = {"basic": {"name": name}, "kind": sensor_type}
     if properties:
-        body.update(json.loads(properties))
+        extra = json.loads(properties)
+        # Merge "basic" sub-dict if caller provides extra basic fields,
+        # otherwise replace top-level keys.
+        extra_basic = extra.pop("basic", None)
+        if extra_basic:
+            body["basic"].update(extra_basic)
+        body.update(extra)
     result = await _prtg_v2(
         "POST",
         f"/experimental/devices/{device_id}/sensor",
@@ -1315,7 +1321,7 @@ async def delete_object(object_id: int, object_type: str) -> str:
 
 
 @mcp.tool()
-async def trigger_metascan(device_id: int) -> str:
+async def trigger_metascan(device_id: int, kind: str = "auto") -> str:
     """Trigger an auto-discovery metascan on a device via the V2 API.
 
     A metascan instructs PRTG to probe the target device and automatically
@@ -1327,6 +1333,9 @@ async def trigger_metascan(device_id: int) -> str:
 
     Args:
         device_id: Numeric ID of the device to scan.
+        kind: Metascan kind discriminator required by the v2 endpoint.
+            Defaults to "auto" (standard auto-discovery). Override with a
+            specific scan kind if your PRTG environment requires one.
 
     Returns:
         JSON string with the metascan result, or an error string.
@@ -1337,6 +1346,7 @@ async def trigger_metascan(device_id: int) -> str:
     result = await _prtg_v2(
         "POST",
         f"/experimental/devices/{device_id}/metascan",
+        json_body={"kind": kind},
     )
     return json.dumps(result, indent=2)
 
@@ -1386,10 +1396,13 @@ async def get_device_health(device_id: int) -> str:
     Returns:
         JSON string containing the device row with all sensor-count columns.
     """
+    # PRTG V1 table.json: the `id` parameter scopes to CHILDREN of the given
+    # object, so passing the device_id returned an empty list. Use
+    # `filter_objid` to match the device row itself instead.
     params = {
         "content": "devices",
         "columns": "objid,name,host,upsens,downsens,downacksens,partialdownsens,warnsens,pausedsens,unusualsens,undefinedsens,totalsens",
-        "id": device_id,
+        "filter_objid": device_id,
         "count": 1,
         "output": "json",
     }
