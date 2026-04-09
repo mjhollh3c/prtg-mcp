@@ -1214,11 +1214,11 @@ async def create_sensor(
     err = _check_write_allowed()
     if err:
         return err
-    body: dict = {"basic": {"name": name}, "kind": sensor_type}
+    # PRTG v2 requires the sensor "kind" to be supplied as a QUERY parameter
+    # on the POST; the JSON body holds the object fields (basic.name, tags, etc.)
+    body: dict = {"basic": {"name": name}}
     if properties:
         extra = json.loads(properties)
-        # Merge "basic" sub-dict if caller provides extra basic fields,
-        # otherwise replace top-level keys.
         extra_basic = extra.pop("basic", None)
         if extra_basic:
             body["basic"].update(extra_basic)
@@ -1226,6 +1226,7 @@ async def create_sensor(
     result = await _prtg_v2(
         "POST",
         f"/experimental/devices/{device_id}/sensor",
+        params={"kind": sensor_type},
         json_body=body,
     )
     return json.dumps(result, indent=2)
@@ -1343,10 +1344,11 @@ async def trigger_metascan(device_id: int, kind: str = "auto") -> str:
     err = _check_write_allowed()
     if err:
         return err
+    # PRTG v2 expects the metascan "kind" as a query parameter, not JSON body.
     result = await _prtg_v2(
         "POST",
         f"/experimental/devices/{device_id}/metascan",
-        json_body={"kind": kind},
+        params={"kind": kind},
     )
     return json.dumps(result, indent=2)
 
