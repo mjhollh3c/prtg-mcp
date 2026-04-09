@@ -1148,7 +1148,7 @@ async def create_group(parent_id: int, parent_type: str, name: str) -> str:
     result = await _prtg_v2(
         "POST",
         f"/experimental/{parent_type}/{parent_id}/group",
-        json_body={"name": name},
+        json_body={"basic": {"name": name}},
     )
     return json.dumps(result, indent=2)
 
@@ -1179,8 +1179,8 @@ async def create_device(
         return err
     result = await _prtg_v2(
         "POST",
-        f"/experimental/{parent_type}/{parent_id}/devices",
-        json_body={"name": name, "host": host},
+        f"/experimental/{parent_type}/{parent_id}/device",
+        json_body={"basic": {"name": name, "host": host}},
     )
     return json.dumps(result, indent=2)
 
