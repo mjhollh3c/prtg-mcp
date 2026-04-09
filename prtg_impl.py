@@ -1175,8 +1175,10 @@ async def create_sensor(
     err = _check_write_allowed()
     if err:
         return err
-    # PRTG v2 requires the sensor "kind" to be supplied as a QUERY parameter
-    # on the POST; the JSON body holds the object fields (basic.name, tags, etc.)
+    # PRTG v2 requires the sensor kind to be supplied as a query parameter
+    # named "kindid" (all lowercase, no underscore) — discovered empirically;
+    # "kind", "kindId", "kind_id", and body-only forms are all rejected with
+    # 'the kind ID is mandatory'. The JSON body holds object fields under "basic".
     body: dict = {"basic": {"name": name}}
     if properties:
         extra = json.loads(properties)
@@ -1187,7 +1189,7 @@ async def create_sensor(
     result = await _prtg_v2(
         "POST",
         f"/experimental/devices/{device_id}/sensor",
-        params={"kind": sensor_type},
+        params={"kindid": sensor_type},
         json_body=body,
     )
     return json.dumps(result, indent=2)
