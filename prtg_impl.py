@@ -1281,21 +1281,25 @@ async def delete_object(object_id: int, object_type: str) -> str:
     return json.dumps(result, indent=2)
 
 
-async def trigger_metascan(device_id: int, kind: str = "auto") -> str:
-    """Trigger an auto-discovery metascan on a device via the V2 API.
+async def trigger_metascan(device_id: int, kind: str = "snmpdiskfree") -> str:
+    """Execute a sensor meta-scan on a device via the V2 API.
 
-    A metascan instructs PRTG to probe the target device and automatically
-    suggest or create sensors based on the services and protocols it discovers.
-    This is equivalent to running "Add Sensor (Auto-Discovery)" in the PRTG web
-    interface.
+    A meta-scan probes a device to discover candidate sensors of a specific
+    kind. As of PRTG 26.x the v2 ``/experimental/devices/{id}/metascan``
+    endpoint only supports ONE sensor kind:
+
+        - snmpdiskfree
+
+    Other values are rejected with "MetaScan: '<kind>' is not supported".
+    Paessler will likely add more kinds in future PRTG releases — check the
+    OAS at ``https://<prtg-host>:1616/api/v2/oas/`` for the current list.
 
     Note: Write operations must be enabled (PRTG_READ_ONLY=false in .env).
 
     Args:
         device_id: Numeric ID of the device to scan.
-        kind: Metascan kind discriminator required by the v2 endpoint.
-            Defaults to "auto" (standard auto-discovery). Override with a
-            specific scan kind if your PRTG environment requires one.
+        kind: Sensor kind to meta-scan for. Currently must be
+            ``"snmpdiskfree"`` (the only supported value, also the default).
 
     Returns:
         JSON string with the metascan result, or an error string.
