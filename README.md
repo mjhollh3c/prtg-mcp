@@ -1,6 +1,24 @@
 # PRTG Network Monitor MCP Server
 
-An MCP server exposing 40 tools for PRTG Network Monitor, wrapping both the REST API v2 (experimental endpoints) and the classic v1 API. Provides full read and (optionally) write access to your monitoring environment through Claude Code.
+An MCP server exposing 41 tools for PRTG Network Monitor, wrapping both the REST API v2 (experimental endpoints) and the classic v1 API. Provides full read and (optionally) write access to your monitoring environment through Claude Code.
+
+---
+
+## Tool Summary
+
+| Category | Count | Requires write mode | Tools |
+|---|---|---|---|
+| **V2 Read** | 14 | no | `list_probes`, `list_groups`, `list_devices`, `list_sensors`, `list_objects`, `list_channels`, `list_users`, `list_user_groups`, `get_user`, `get_user_group`, `get_license_info`, `get_device_templates`, `get_child_object_types`, `get_timeseries` |
+| **V1 Read** | 2 | no | `query_table`, `get_historic_data` |
+| **Convenience** | 2 | no | `get_problem_sensors`, `get_device_health` |
+| **V1 Operational** | 8 | yes | `pause_object`, `pause_object_for`, `resume_object`, `acknowledge_alarm`, `scan_now`, `simulate_error`, `auto_discovery`, `test_notification` |
+| **V1 Management** | 7 | yes | `rename_object`, `set_object_property`, `set_priority`, `clone_object`, `set_position`, `set_geo_location`, `add_to_report` |
+| **V2 Write** | 7 | yes | `create_group`, `create_device`, `create_sensor`, `update_sensor`, `move_object`, `delete_object`, `trigger_metascan` |
+| **Server** | 1 | no | `reload_prtg_impl` (hot-reload `prtg_impl.py` without restarting the MCP server) |
+
+**Totals:** 18 read-only · 22 write · 1 server-management · **41 total**
+
+See [Tool Reference](#tool-reference) below for per-tool descriptions.
 
 ---
 
@@ -130,6 +148,12 @@ Always available regardless of `PRTG_READ_ONLY`.
 |------|-------------|
 | `get_problem_sensors` | List all non-Up sensors — "what's broken?" |
 | `get_device_health` | Device sensor status summary (up/down/warn counts) |
+
+### Server Tools (1)
+
+| Tool | Description |
+|------|-------------|
+| `reload_prtg_impl` | Hot-reload the `prtg_impl` module so edits to existing functions take effect without restarting the MCP server. Adding brand-new tools still requires a full restart. |
 
 ---
 
